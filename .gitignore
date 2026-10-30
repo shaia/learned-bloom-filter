@@ -1,0 +1,13 @@
+# Build trees: one per toolchain (g++, MSVC, MSVC + CUDA), all generated.
+build*/
+bin/
+*.ilk
+*.pdb
+
+# The downloaded FastPLBF reference that tools/gen_golden.py reads. Third-party
+# code; fetch it from https://github.com/atsukisato/FastPLBF instead.
+ref/
+
+# Editor and language-server state.
+.cache/
+.vscode/

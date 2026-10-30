@@ -1,0 +1,13 @@
+foreach(name IN ITEMS bench_construct bench_query)
+  add_executable(${name} ${name}.cpp)
+  set_target_properties(${name} PROPERTIES OUTPUT_NAME ${name}${PLBF_BIN_SUFFIX})
+  target_link_libraries(${name} PRIVATE plbf::plbf plbf_dev_flags)
+  target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endforeach()
+
+if(PLBF_BUILD_CUDA)
+  add_executable(bench_cuda bench_cuda.cu)
+  set_target_properties(bench_cuda PROPERTIES OUTPUT_NAME bench_cuda${PLBF_BIN_SUFFIX})
+  target_link_libraries(bench_cuda PRIVATE plbf::cuda plbf_dev_flags)
+  target_include_directories(bench_cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
