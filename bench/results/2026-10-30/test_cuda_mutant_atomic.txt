@@ -1,0 +1,22 @@
+device: NVIDIA GeForce RTX 4090 Laptop GPU, sm_89, 76 SMs
+cuda: device segment index equals segment_grid::index()
+cuda: GPU histogram equals segment_counts()
+cuda: a CPU-built filter, uploaded, answers exactly as contains()
+cuda: a GPU-built filter is bit-identical to a CPU-built one
+  FAIL  N=1000 k=5 fpr 0.010000: same 8214 blocks, bit for bit
+  FAIL  N=1000 k=5 fpr 0.010000: GPU answers equal the CPU filter's
+  FAIL  N=1000 k=5 fpr 0.010000: to_host() answers equal too
+  FAIL  N=1000 k=5 fpr 0.001000: same 14306 blocks, bit for bit
+  FAIL  N=1000 k=5 fpr 0.001000: GPU answers equal the CPU filter's
+  FAIL  N=1000 k=5 fpr 0.001000: to_host() answers equal too
+  FAIL  N=997 k=9 fpr 0.020000: same 6155 blocks, bit for bit
+  FAIL  N=997 k=9 fpr 0.020000: GPU answers equal the CPU filter's
+  FAIL  N=997 k=9 fpr 0.020000: to_host() answers equal too
+  FAIL  N=1000 k=5 memory 1800000.000000: same 8528 blocks, bit for bit
+  FAIL  N=1000 k=5 memory 1800000.000000: GPU answers equal the CPU filter's
+  FAIL  N=1000 k=5 memory 1800000.000000: to_host() answers equal too
+  FAIL  N=20011 k=7 fpr 0.010000: same 8439 blocks, bit for bit
+  FAIL  N=20011 k=7 fpr 0.010000: GPU answers equal the CPU filter's
+  FAIL  N=20011 k=7 fpr 0.010000: to_host() answers equal too
+
+test_cuda: 38 checks, 15 failed

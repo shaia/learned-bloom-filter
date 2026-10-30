@@ -1,0 +1,9 @@
+device: NVIDIA GeForce RTX 4090 Laptop GPU, sm_89, 76 SMs
+cuda: device segment index equals segment_grid::index()
+  FAIL  54543918 scores over 10 grids, N up to 2^24 + 1  (11541 != 0)
+cuda: GPU histogram equals segment_counts()
+  FAIL  N = 20011: 2060050 scores, every count equal
+cuda: a CPU-built filter, uploaded, answers exactly as contains()
+cuda: a GPU-built filter is bit-identical to a CPU-built one
+
+test_cuda: 38 checks, 2 failed

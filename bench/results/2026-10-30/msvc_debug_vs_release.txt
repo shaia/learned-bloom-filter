@@ -1,0 +1,87 @@
+=== release: cl /O2 /Ob2 /DNDEBUG /MD
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 2000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                5.43 ns/query   measured FPR 0.0098
+  learned, batch scalar                   9.23 ns/query   measured FPR 0.0098
+  learned, scalar lookup + AVX2 probe     4.42 ns/query   measured FPR 0.0098
+  learned, AVX2 lookup + AVX2 probe       2.52 ns/query   measured FPR 0.0098
+  plain split-block, loop                 1.93 ns/query   measured FPR 0.0101
+  plain split-block, AVX2 batch           1.07 ns/query   measured FPR 0.0101
+=== debug: cl /Zi /Ob0 /Od /RTC1 /MDd
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 2000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop               27.18 ns/query   measured FPR 0.0098
+  learned, batch scalar                  32.23 ns/query   measured FPR 0.0098
+  learned, scalar lookup + AVX2 probe    26.52 ns/query   measured FPR 0.0098
+  learned, AVX2 lookup + AVX2 probe      61.05 ns/query   measured FPR 0.0098
+  plain split-block, loop                13.47 ns/query   measured FPR 0.0101
+  plain split-block, AVX2 batch           8.55 ns/query   measured FPR 0.0101
+
+=== release: cl /O2 /Ob2 /DNDEBUG /MD
+bench_construct: 223088 keys, 428118 non-keys (medians; plbf is one run)
+
+ideal scores, N = 1000, k = 5, target FPR 0.01
+  histogram keys + non-keys         2.135 ms
+  search plbf                    1288.839 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast                       3.772 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast_pp                    0.472 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast_sharp                 0.497 ms   backup   1282843 bits  (x1.00000 of exact)
+  whole build (fast_sharp)          3.493 ms   197404 bytes (7.08 bits/key)
+
+ideal scores, N = 1000, k = 50, target FPR 0.01
+  histogram keys + non-keys         1.512 ms
+  search fast                      27.855 ms   backup   1225379 bits  (x1.00000 of exact)
+  search fast_pp                    5.165 ms   backup   1225415 bits  (x1.00003 of exact)
+  search fast_sharp                 5.915 ms   backup   1225421 bits  (x1.00003 of exact)
+  whole build (fast_sharp)         10.195 ms   187908 bytes (6.74 bits/key)
+
+bumpy scores, N = 1000, k = 5, target FPR 0.01
+  histogram keys + non-keys         1.500 ms
+  search plbf                    1303.428 ms   backup   1253882 bits  (x1.00000 of exact)
+  search fast                       7.258 ms   backup   1253882 bits  (x1.00000 of exact)
+  search fast_pp                    0.847 ms   backup   1254747 bits  (x1.00069 of exact)
+  search fast_sharp                 0.832 ms   backup   1255977 bits  (x1.00167 of exact)
+  whole build (fast_sharp)          7.238 ms   194876 bytes (6.99 bits/key)
+
+bumpy scores, N = 1000, k = 50, target FPR 0.01
+  histogram keys + non-keys         3.248 ms
+  search fast                      46.732 ms   backup   1168565 bits  (x1.00000 of exact)
+  search fast_pp                    9.175 ms   backup   1168581 bits  (x1.00001 of exact)
+  search fast_sharp                10.053 ms   backup   1168565 bits  (x1.00000 of exact)
+  whole build (fast_sharp)         18.019 ms   182308 bytes (6.54 bits/key)
+=== debug: cl /Zi /Ob0 /Od /RTC1 /MDd
+bench_construct: 223088 keys, 428118 non-keys (medians; plbf is one run)
+
+ideal scores, N = 1000, k = 5, target FPR 0.01
+  histogram keys + non-keys         6.359 ms
+  search plbf                   10362.871 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast                      35.982 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast_pp                    2.242 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast_sharp                 5.130 ms   backup   1282843 bits  (x1.00000 of exact)
+  whole build (fast_sharp)         26.816 ms   197404 bytes (7.08 bits/key)
+
+ideal scores, N = 1000, k = 50, target FPR 0.01
+  histogram keys + non-keys        10.964 ms
+  search fast                     377.928 ms   backup   1225379 bits  (x1.00000 of exact)
+  search fast_pp                   28.984 ms   backup   1225415 bits  (x1.00003 of exact)
+  search fast_sharp                50.651 ms   backup   1225421 bits  (x1.00003 of exact)
+  whole build (fast_sharp)         73.121 ms   187908 bytes (6.74 bits/key)
+
+bumpy scores, N = 1000, k = 5, target FPR 0.01
+  histogram keys + non-keys        10.831 ms
+  search plbf                   12863.228 ms   backup   1253882 bits  (x1.00000 of exact)
+  search fast                      37.447 ms   backup   1253882 bits  (x1.00000 of exact)
+  search fast_pp                    2.367 ms   backup   1254747 bits  (x1.00069 of exact)
+  search fast_sharp                 5.032 ms   backup   1255977 bits  (x1.00167 of exact)
+  whole build (fast_sharp)         25.574 ms   194876 bytes (6.99 bits/key)
+
+bumpy scores, N = 1000, k = 50, target FPR 0.01
+  histogram keys + non-keys        11.383 ms
+  search fast                     359.506 ms   backup   1168565 bits  (x1.00000 of exact)
+  search fast_pp                   34.580 ms   backup   1168581 bits  (x1.00001 of exact)
+  search fast_sharp                51.602 ms   backup   1168565 bits  (x1.00000 of exact)
+  whole build (fast_sharp)         65.393 ms   182308 bytes (6.54 bits/key)

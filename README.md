@@ -104,7 +104,9 @@ ctest --test-dir build --output-on-failure
 
 Binaries land in `bin/`. Release is the default for every toolchain, MSVC
 included. CMake's MSVC platform file otherwise defaults to Debug, which runs
-20–60× slower here. On Windows, the clang++ bundled with Visual Studio
+3–24× slower here (`bench/results/2026-10-30/msvc_debug_vs_release.txt`) and
+reorders the kernels: in Debug the AVX2 lookup is the slowest batch. On
+Windows, the clang++ bundled with Visual Studio
 targets 32-bit x86 by default. Pass `--target=x86_64-pc-windows-msvc` for the
 AVX2 kernels; the 32-bit build works, with scalar probes only.
 

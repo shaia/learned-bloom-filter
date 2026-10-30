@@ -1,0 +1,11 @@
+--- include/plbf/cuda/filter.cuh
++++ include/plbf/cuda/filter.cuh (mutant)
+@@ -203,7 +203,7 @@
+             (sl >> 32) + __umulhi(static_cast<std::uint32_t>(h >> 32), static_cast<std::uint32_t>(sl));
+         const auto x = static_cast<std::uint32_t>(h);
+ #pragma unroll
+-        for (int j = 0; j < 4; ++j) {
++        for (int j = 0; j < 3; ++j) {  // MUTANT: the last of the four atomicOrs dropped
+             const unsigned long long m = static_cast<unsigned long long>(bit(x, salt[2 * j])) |
+                                          static_cast<unsigned long long>(bit(x, salt[2 * j + 1])) << 32;
+             atomicOr(&blocks[4 * idx + j], m);
