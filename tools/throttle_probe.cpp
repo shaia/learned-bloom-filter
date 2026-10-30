@@ -1,5 +1,5 @@
-// Prints, once a second for `seconds`, a single-thread compute rate and a DRAM
-// pointer-chase latency, to see when and how the machine slows down under load.
+// Prints `seconds` samples, about two a second, of a single-thread compute rate
+// and a DRAM pointer-chase latency, to see when and how the machine slows down under load.
 //   g++ -std=c++20 -O2 throttle_probe.cpp -o throttle_probe && ./throttle_probe 90
 #include <chrono>
 #include <cstdint>

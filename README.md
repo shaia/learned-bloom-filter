@@ -169,13 +169,13 @@ For comparison, the Python reference spends about 1.2 s on `fast` and 45 ms on
 on the number of keys.
 
 **Queries** (target FPR 1%; half keys, half unseen non-keys, random order; best
-of 7 interleaved rounds, one run per row):
+of 7 interleaved rounds; the recorded run, `bench/results/2026-10-30/bench_query_gcc.txt`):
 
 | keys | filter size | AVX2 lookup + AVX2 probe | scalar lookup + AVX2 probe | scalar batch | plain split-block, AVX2 batch |
 |---|---|---|---|---|---|
-| 200 K | 178 KB (7.1 bits/key) | 3.1 ns | 4.3 ns | 8.7 ns | 1.1 ns (10.5 bits/key) |
-| 4 M | 3.4 MB (6.8 bits/key) | 3.1 ns | 4.6 ns | 8.4 ns | 2.1 ns |
-| 64 M | 56 MB (7.0 bits/key) | see below | | | |
+| 200 K | 178 KB (7.1 bits/key) | 3.0 ns | 4.5 ns | 8.4 ns | 1.2 ns (10.5 bits/key) |
+| 4 M | 3.4 MB (6.8 bits/key) | 3.1 ns | 5.7 ns | 9.4 ns | 2.1 ns |
+| 64 M | 56 MB (7.0 bits/key) | 6.4 ns | 7.9 ns | 10.9 ns | 7.2 ns |
 
 The first column is `kernel::avx2`, the default wherever the CPU has AVX2: it
 maps four scores to block addresses at once (see the design notes). The second
@@ -189,19 +189,16 @@ query (1.56×). The scalar paths did not move: 9.96 against 9.97 ns one query at
 a time, 8.16 against 8.03 ns for the scalar batch.
 
 With the filter in cache, the learned filter now costs about 2 ns per query
-more than a plain split-block filter (3.1 against 1.1 ns). That is the price of
+more than a plain split-block filter (3.0 against 1.2 ns). That is the price of
 mapping a score to its region, paid for a third less memory.
 
-**Past L3 the result is inconclusive.** In the one clean run at 64M keys, the
-vector lookup took 6.0 ns against 6.8 ns for the scalar lookup, and the plain
-filter 6.1 ns: memory latency dominates there. Every later run came after the
-machine's memory latency rose 7–8× for every variant, including the unchanged
-plain filter (the laptop's power profile was "Silent" at the time). In those
-runs the two lookups were within noise of each other. Rerun
-`bin/bench_query 64000000` on a quiet machine before relying on a DRAM-sized
-number. In the earliest clean run, batching was 3.7–4.8× faster than querying
-one at a time at this size, because the chunk prefetches 64 blocks before
-testing any of them.
+**Past L3, memory latency dominates.** At 64M keys the vector lookup takes
+6.4 ns against 7.9 ns for the scalar lookup (1.23×), and the learned filter's
+batch is faster than the plain filter's (7.2 ns), which is a third larger.
+DRAM-sized runs during development came after the machine's memory latency
+rose 7–8× for every variant, the plain filter included, and are not quoted.
+Batching is 3.9× faster than querying one at a time at this size (42.5 against
+10.9 ns), because the chunk prefetches 64 blocks before testing any of them.
 
 **GPU** (RTX 4090 Laptop GPU: 76 SMs, 67 MB L2; CUDA 13.0, MSVC 19.44 host
 code). These are from one `bin/bench_cuda_msvc` run, in the "Silent" power
@@ -322,15 +319,17 @@ python -I tools/gen_golden.py path/to/FastPLBF --out-dir test
 - **`tools/figure_layouts.cpp`** writes the numbers behind the blog series' explorable figures from
   the library itself: the layout for every slider setting, the DP traces of the three row-maxima
   solvers, and their evaluation counts as N grows.
-- **`tools/throttle_probe.cpp`** prints a compute rate and a DRAM latency once a second. Run it
-  before trusting a benchmark on a laptop: the first attempt at recording `bench/results/2026-10-30/`
-  ran 4–12× slow because the CPU throttled within 5 seconds of load, and only this showed it.
+- **`tools/throttle_probe.cpp`** prints a compute rate and a DRAM latency about twice a second.
+  Run it before trusting a benchmark on a laptop: the first attempt at recording
+  `bench/results/2026-10-30/` ran 2.5–10× slow because the CPU throttled within 5 seconds of load,
+  and only this showed it.
+- **`tools/pcie.cu`** measures what a query that starts on the CPU costs a GPU filter: the copy
+  in, the probe and the copy out. It is the reducer from Part 10 of the blog series.
 
 Raw benchmark outputs, with the machine and its power state, live in `bench/results/<date>/`.
 
 ## Not done yet
 
-- A clean DRAM-sized CPU query measurement (see Results).
 - A multithreaded CPU build. The CPU figures above are one thread; the
   histogram and the insert both parallelise.
 - Serialisation. `filter::from_parts` and the `tables()`/`blocks()` accessors

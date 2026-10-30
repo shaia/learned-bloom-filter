@@ -8,7 +8,7 @@ The raw outputs the blog series quotes. Nothing here is edited by hand.
 | `bench_construct_gcc.txt` | `bench/bench_construct.cpp` | g++ 16.1.0 (MinGW-w64 UCRT), `-O3 -DNDEBUG -ffp-contract=off` |
 | `bench_query_gcc.txt` | `bench/bench_query.cpp` | the same |
 | `bench_cuda_msvc.txt` | `bench/bench_cuda.cu` | CUDA 13.0.88, host MSVC 19.44.35229 `/O2 /Ob2 /DNDEBUG` |
-| `probe_before.txt`, `probe_after.txt` | `tools/throttle_probe.cpp`, 20 s each side of the three runs | g++, `-O2` |
+| `probe_before.txt`, `probe_after.txt` | `tools/throttle_probe.cpp 20`: 20 samples, about 10 s, each side of the three runs | g++, `-O2` |
 | `captured_vs_locals.txt` | `bench/bench_query.cpp` at 200,000 keys, built twice, run alternately six times each, probe either side; see below | g++ 16.1.0, `-O3 -DNDEBUG -std=c++20 -ffp-contract=off -static` |
 | `test_filter_mutant.txt` | `test/test_filter.cpp` against the headers with `test_filter_mutant.diff` applied | the same |
 | `test_cuda_mutant_index.txt`, `test_cuda_mutant_atomic.txt` | `test/test_cuda.cu` against `cuda/filter.cuh` with the matching `.diff` applied | CUDA 13.0.88, host MSVC 19.44, `-O2 -Ob2 -DNDEBUG -arch=native` |
@@ -52,10 +52,11 @@ The raw outputs the blog series quotes. Nothing here is edited by hand.
 
 Windows reported its "Silent" power scheme throughout. The user switched Razer Synapse to its
 performance mode, which Windows does not reflect. The probe files show what the CPU actually did:
-a single-thread compute rate and a DRAM pointer-chase latency, once a second.
+a single-thread compute rate and a DRAM pointer-chase latency, about twice a second.
 
 The first recording attempt, in `throttled/`, ran before that switch held. Within 5 seconds of
 sustained load the probe's compute rate fell from about 1,190 to about 160 Mops/s, and its DRAM
-latency rose from 94 to 155–200 ns. Every CPU figure in `throttled/` from the second minute on is 4
-to 12 times slower than in a clean run, while the GPU kernel figures are unaffected. Those files are
+latency rose from 94 to 155–200 ns. That trace was read on screen and not saved. The CPU figures in
+`throttled/` past the opening section are 2.5 to 10 times slower than in the recorded run; the GPU
+kernel figures are not slower, and at the two smaller filter sizes they are faster. Those files are
 kept as evidence of that failure, and are **not** quoted as results.
