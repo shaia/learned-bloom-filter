@@ -1,0 +1,24 @@
+segments: index() is the reference's bisect, including on the thresholds
+segments: the four-lane index equals index() everywhere
+  FAIL  54543918 scores over 10 grids, N up to 2^24 + 1  (11541 != 0)
+split block: scalar and AVX2 probes agree bit for bit
+filter: every batch kernel equals contains(), edge scores and ragged lengths
+split block: the FPR model predicts what a filter measures
+  load    2 keys/block: predicted 4.075e-08, measured 0.000e+00
+  load    6 keys/block: predicted 8.131e-06, measured 7.000e-06
+  load   15 keys/block: predicted 9.484e-04, measured 9.465e-04
+  load   40 keys/block: predicted 7.899e-02, measured 7.911e-02
+filter: region lookup is the reference's get_region_idx
+filter: from_parts rebuilds a filter, and rejects parts that do not fit
+filter: no false negatives, FPR on held-out non-keys meets the target
+  fast       target 0.0100  expected 0.0100  measured 0.0097      88.3 KiB  (classic-BF model     70.7 KiB)
+  fast_pp    target 0.0100  expected 0.0100  measured 0.0097      88.3 KiB  (classic-BF model     70.7 KiB)
+  fast_sharp target 0.0100  expected 0.0100  measured 0.0097      88.3 KiB  (classic-BF model     70.7 KiB)
+  fast       target 0.0010  expected 0.0010  measured 0.0010     151.3 KiB  (classic-BF model    129.2 KiB)
+  fast_pp    target 0.0010  expected 0.0010  measured 0.0010     151.3 KiB  (classic-BF model    129.2 KiB)
+  fast_sharp target 0.0010  expected 0.0010  measured 0.0010     151.3 KiB  (classic-BF model    129.2 KiB)
+filter: memory-budget build
+  budget 4   target 0.0238  expected 0.0238  measured 0.0236      61.6 KiB  (classic-BF model     48.8 KiB)
+  budget 8   target 0.0035  expected 0.0035  measured 0.0034     115.2 KiB  (classic-BF model     97.7 KiB)
+
+test_filter: 116 checks, 1 failed

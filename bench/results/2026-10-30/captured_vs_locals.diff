@@ -1,0 +1,27 @@
+--- bench/bench_query.cpp (as committed, locals)
++++ bench_query_captured.cpp (the loops read through the closure)
+@@ -135,11 +135,7 @@
+     std::vector<variant> variants = {
+         {"learned, contains() loop", false,
+          [&] {
+-             const std::uint64_t* qh = q.hashes.data();
+-             const double* qs = q.scores.data();
+-             std::uint8_t* o = out.data();
+-             const std::size_t n = n_queries;
+-             for (std::size_t i = 0; i < n; ++i) o[i] = f.contains(qh[i], qs[i]) ? 1 : 0;
++             for (std::size_t i = 0; i < n_queries; ++i) out[i] = f.contains(q.hashes[i], q.scores[i]) ? 1 : 0;
+          }},
+         {"learned, batch scalar", false, [&] { f.contains_batch(q.hashes, q.scores, out, kernel::scalar); }},
+         {"learned, scalar lookup + AVX2 probe", true,
+@@ -147,10 +143,7 @@
+         {"learned, AVX2 lookup + AVX2 probe", true, [&] { f.contains_batch(q.hashes, q.scores, out, kernel::avx2); }},
+         {"plain split-block, loop", false,
+          [&] {
+-             const std::uint64_t* qh = q.hashes.data();
+-             std::uint8_t* o = out.data();
+-             const std::size_t n = n_queries;
+-             for (std::size_t i = 0; i < n; ++i) o[i] = plain.contains(qh[i]) ? 1 : 0;
++             for (std::size_t i = 0; i < n_queries; ++i) out[i] = plain.contains(q.hashes[i]) ? 1 : 0;
+          }},
+ #if PLBF_X86_64
+         {"plain split-block, AVX2 batch", true,

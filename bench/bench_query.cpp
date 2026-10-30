@@ -131,7 +131,8 @@ void run(std::size_t n_keys, std::size_t n_queries) {
     // The loops copy what they read into locals first. A byte store through
     // out[i] may alias anything, including the closure's captured references,
     // so reading through those would reload the pointers and the count on every
-    // iteration and bill it to the filter: ~0.9 ns/query, measured.
+    // iteration and bill it to the filter: 0.25-0.31 ns/query with the filter in
+    // L2 (bench/results/2026-10-30/captured_vs_locals.txt).
     std::vector<variant> variants = {
         {"learned, contains() loop", false,
          [&] {

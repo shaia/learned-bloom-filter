@@ -1,0 +1,11 @@
+--- include/plbf/segments.hpp
++++ include/plbf/segments.hpp (mutant: no downward correction)
+@@ -80,7 +80,7 @@
+         const __m256d at = _mm256_i32gather_pd(t, ci, 8);
+         const __m256d down = _mm256_and_pd(_mm256_cmp_pd(below, score, _CMP_GE_OQ), one);
+         const __m256d up = _mm256_and_pd(_mm256_cmp_pd(at, score, _CMP_LT_OQ), one);
+-        c = _mm256_add_pd(_mm256_sub_pd(c, down), up);
++        c = _mm256_add_pd(c, up); (void)down;  // MUTANT: no downward correction
+         // Only reachable outside (0, 1): down at c = 1 for s <= 0, up at c = N for s > 1.
+         c = _mm256_min_pd(_mm256_max_pd(c, one), n);
+         return _mm256_cvttpd_epi32(c);

@@ -1,0 +1,154 @@
+# probe before
+t=  0.5s  compute  1317.4 Mops/s  dram   94.7 ns/load
+t=  1.0s  compute  1181.7 Mops/s  dram   94.9 ns/load
+t=  1.6s  compute  1282.8 Mops/s  dram   93.9 ns/load
+t=  2.1s  compute  1285.1 Mops/s  dram   98.7 ns/load
+t=  2.6s  compute  1310.9 Mops/s  dram   96.3 ns/load
+t=  3.1s  compute   978.0 Mops/s  dram  109.5 ns/load
+t=  3.6s  compute   661.8 Mops/s  dram  113.8 ns/load
+t=  4.2s  compute   618.4 Mops/s  dram  120.2 ns/load
+t=  4.7s  compute   647.9 Mops/s  dram  109.5 ns/load
+t=  5.2s  compute   626.1 Mops/s  dram  113.0 ns/load
+=== captured rep=1
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                9.14 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.77 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.52 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.35 ns/query   measured FPR 0.0099
+  plain split-block, loop                 4.04 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.95 ns/query   measured FPR 0.0100
+=== locals rep=1
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                9.03 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.89 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.59 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.42 ns/query   measured FPR 0.0099
+  plain split-block, loop                 3.89 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           1.00 ns/query   measured FPR 0.0100
+=== captured rep=2
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                9.20 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.77 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.50 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.33 ns/query   measured FPR 0.0099
+  plain split-block, loop                 4.03 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.97 ns/query   measured FPR 0.0100
+=== locals rep=2
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.77 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.82 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.49 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.32 ns/query   measured FPR 0.0099
+  plain split-block, loop                 3.69 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.96 ns/query   measured FPR 0.0100
+=== captured rep=3
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.89 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.86 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.38 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.45 ns/query   measured FPR 0.0099
+  plain split-block, loop                 4.29 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.95 ns/query   measured FPR 0.0100
+=== locals rep=3
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.80 ns/query   measured FPR 0.0099
+  learned, batch scalar                   7.02 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.41 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.42 ns/query   measured FPR 0.0099
+  plain split-block, loop                 3.81 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.95 ns/query   measured FPR 0.0100
+=== captured rep=4
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                9.26 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.70 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.47 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.39 ns/query   measured FPR 0.0099
+  plain split-block, loop                 4.30 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.97 ns/query   measured FPR 0.0100
+=== locals rep=4
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.84 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.83 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.57 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.33 ns/query   measured FPR 0.0099
+  plain split-block, loop                 3.88 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.92 ns/query   measured FPR 0.0100
+=== captured rep=5
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                9.05 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.66 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.38 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.30 ns/query   measured FPR 0.0099
+  plain split-block, loop                 4.04 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.91 ns/query   measured FPR 0.0100
+=== locals rep=5
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.70 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.58 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.46 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.42 ns/query   measured FPR 0.0099
+  plain split-block, loop                 3.77 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.95 ns/query   measured FPR 0.0100
+=== captured rep=6
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.77 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.69 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.36 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.32 ns/query   measured FPR 0.0099
+  plain split-block, loop                 4.00 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.96 ns/query   measured FPR 0.0100
+=== locals rep=6
+bench_query: best of 7 interleaved rounds per variant
+
+200000 keys, 10000000 queries, target FPR 0.01
+  learned filter     177852 bytes ( 7.11 bits/key)   plain split-block     263232 bytes (10.53 bits/key)
+  learned, contains() loop                8.65 ns/query   measured FPR 0.0099
+  learned, batch scalar                   6.49 ns/query   measured FPR 0.0099
+  learned, scalar lookup + AVX2 probe     3.34 ns/query   measured FPR 0.0099
+  learned, AVX2 lookup + AVX2 probe       2.28 ns/query   measured FPR 0.0099
+  plain split-block, loop                 3.68 ns/query   measured FPR 0.0100
+  plain split-block, AVX2 batch           0.95 ns/query   measured FPR 0.0100
+# probe after
+t=  0.5s  compute  1302.1 Mops/s  dram   91.7 ns/load
+t=  1.0s  compute  1299.5 Mops/s  dram   94.3 ns/load
+t=  1.6s  compute  1318.0 Mops/s  dram   98.2 ns/load
+t=  2.1s  compute  1295.5 Mops/s  dram   92.2 ns/load
+t=  2.6s  compute  1319.6 Mops/s  dram   95.7 ns/load
+t=  3.1s  compute  1000.8 Mops/s  dram  117.5 ns/load
+t=  3.6s  compute   635.0 Mops/s  dram  107.3 ns/load
+t=  4.2s  compute   634.8 Mops/s  dram  106.8 ns/load
+t=  4.7s  compute   640.3 Mops/s  dram  105.3 ns/load
+t=  5.2s  compute   629.0 Mops/s  dram  110.5 ns/load
