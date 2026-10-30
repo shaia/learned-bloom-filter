@@ -56,7 +56,10 @@ a single-thread compute rate and a DRAM pointer-chase latency, about twice a sec
 
 The first recording attempt, in `throttled/`, ran before that switch held. Within 5 seconds of
 sustained load the probe's compute rate fell from about 1,190 to about 160 Mops/s, and its DRAM
-latency rose from 94 to 155–200 ns. That trace was read on screen and not saved. The CPU figures in
-`throttled/` past the opening section are 2.5 to 10 times slower than in the recorded run; the GPU
-kernel figures are not slower, and at the two smaller filter sizes they are faster. Those files are
+latency rose from 94 to 155–200 ns. That trace was read on screen and not saved. Each file's opening sections
+ran before the throttling took hold and are not slow. After that the CPU figures are 2.5 to 9.6 times
+slower than in the recorded run in `bench_query_gcc.txt`, 4.4 to 6.8 in `bench_construct_gcc.txt`
+and 2.7 to 8.9 in `bench_cuda_msvc.txt`. In the last, the GPU's query-kernel figures are not slower,
+and at the two smaller filter sizes they are faster, while its DNA-scale build phases are 14 to 32%
+slower. Those files are
 kept as evidence of that failure, and are **not** quoted as results.

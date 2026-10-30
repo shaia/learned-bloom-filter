@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 # Default to Release, decided before project(): CMake's MSVC platform file sets
 # CMAKE_BUILD_TYPE_INIT to Debug, so the usual "if(NOT CMAKE_BUILD_TYPE)" after
-# project() never fires there, and an MSVC build ends up silently Debug -- 20
-# to 60x slower here, which is not a number to benchmark a GPU against.
+# project() never fires there, and an MSVC build ends up silently Debug -- 3 to
+# 24x slower here, and with the kernels in a different order
+# (bench/results/2026-10-30/msvc_debug_vs_release.txt).
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT DEFINED CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type for single-config generators")
 endif()

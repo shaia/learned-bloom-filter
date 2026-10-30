@@ -321,7 +321,7 @@ python -I tools/gen_golden.py path/to/FastPLBF --out-dir test
   solvers, and their evaluation counts as N grows.
 - **`tools/throttle_probe.cpp`** prints a compute rate and a DRAM latency about twice a second.
   Run it before trusting a benchmark on a laptop: the first attempt at recording
-  `bench/results/2026-10-30/` ran 2.5–10× slow because the CPU throttled within 5 seconds of load,
+  `bench/results/2026-10-30/` ran up to 10× slow once the CPU throttled, within 5 seconds of load,
   and only this showed it.
 - **`tools/pcie.cu`** measures what a query that starts on the CPU costs a GPU filter: the copy
   in, the probe and the copy out. It is the reducer from Part 10 of the blog series.
