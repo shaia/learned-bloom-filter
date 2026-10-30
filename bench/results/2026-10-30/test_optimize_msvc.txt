@@ -1,0 +1,9 @@
+golden: decisions of the Python reference
+  116 cases, 892 values: 892 bit-identical to the reference, worst 0 ulps
+row maxima: the three solvers agree on totally monotone matrices
+methods: plbf == fast always; fast_pp == fast_sharp == fast on ideal inputs
+methods: on non-ideal inputs the exact DP dominates, cell by cell
+  approximate layouts differing from fast on non-ideal inputs: 48 of 80
+arguments: rejected rather than misread
+
+test_optimize: 1252 checks, 0 failed

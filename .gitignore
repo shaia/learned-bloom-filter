@@ -11,3 +11,7 @@ ref/
 # Editor and language-server state.
 .cache/
 .vscode/
+.claude/
+
+# Python bytecode from importing tools/gen_golden.py.
+__pycache__/

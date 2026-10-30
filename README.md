@@ -313,6 +313,19 @@ calls, so nothing needs installing.
 python -I tools/gen_golden.py path/to/FastPLBF --out-dir test
 ```
 
+## Other tools
+
+- **`tools/time_reference.py`** times the Python reference's four searches, and nothing else, at a
+  given scale.
+- **`tools/figure_layouts.cpp`** writes the numbers behind the blog series' explorable figures from
+  the library itself: the layout for every slider setting, the DP traces of the three row-maxima
+  solvers, and their evaluation counts as N grows.
+- **`tools/throttle_probe.cpp`** prints a compute rate and a DRAM latency once a second. Run it
+  before trusting a benchmark on a laptop: the first attempt at recording `bench/results/2026-10-30/`
+  ran 4–12× slow because the CPU throttled within 5 seconds of load, and only this showed it.
+
+Raw benchmark outputs, with the machine and its power state, live in `bench/results/<date>/`.
+
 ## Not done yet
 
 - A clean DRAM-sized CPU query measurement (see Results).

@@ -1,0 +1,6 @@
+time_reference: Python 3.13.9, Intel64 Family 6 Model 183 Stepping 1, GenuineIntel
+223088 keys, 428118 non-keys, N = 1000, k = 5, target FPR 0.01; search only, one run each
+  search fast_sharp         44.651 ms   backup    1282085 bits   boundary [0, 446, 708, 875, 969, 1000]
+  search fast_pp            53.748 ms   backup    1282085 bits   boundary [0, 446, 708, 875, 969, 1000]
+  search fast             1155.267 ms   backup    1282085 bits   boundary [0, 446, 708, 875, 969, 1000]
+  search plbf           636823.176 ms   backup    1282085 bits   boundary [0, 446, 708, 875, 969, 1000]

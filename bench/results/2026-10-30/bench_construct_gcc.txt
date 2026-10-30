@@ -1,0 +1,31 @@
+bench_construct: 223088 keys, 428118 non-keys (medians; plbf is one run)
+
+ideal scores, N = 1000, k = 5, target FPR 0.01
+  histogram keys + non-keys         2.610 ms
+  search plbf                    1532.377 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast                       4.491 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast_pp                    0.536 ms   backup   1282843 bits  (x1.00000 of exact)
+  search fast_sharp                 0.589 ms   backup   1282843 bits  (x1.00000 of exact)
+  whole build (fast_sharp)          5.385 ms   197404 bytes (7.08 bits/key)
+
+ideal scores, N = 1000, k = 50, target FPR 0.01
+  histogram keys + non-keys         2.294 ms
+  search fast                      19.669 ms   backup   1225379 bits  (x1.00000 of exact)
+  search fast_pp                    4.654 ms   backup   1225415 bits  (x1.00003 of exact)
+  search fast_sharp                 5.460 ms   backup   1225421 bits  (x1.00003 of exact)
+  whole build (fast_sharp)         12.655 ms   187908 bytes (6.74 bits/key)
+
+bumpy scores, N = 1000, k = 5, target FPR 0.01
+  histogram keys + non-keys         2.557 ms
+  search plbf                    1572.295 ms   backup   1253882 bits  (x1.00000 of exact)
+  search fast                       4.221 ms   backup   1253882 bits  (x1.00000 of exact)
+  search fast_pp                    0.498 ms   backup   1254747 bits  (x1.00069 of exact)
+  search fast_sharp                 0.509 ms   backup   1255977 bits  (x1.00167 of exact)
+  whole build (fast_sharp)          6.118 ms   194876 bytes (6.99 bits/key)
+
+bumpy scores, N = 1000, k = 50, target FPR 0.01
+  histogram keys + non-keys         2.057 ms
+  search fast                      21.974 ms   backup   1168565 bits  (x1.00000 of exact)
+  search fast_pp                    4.606 ms   backup   1168581 bits  (x1.00001 of exact)
+  search fast_sharp                 5.531 ms   backup   1168565 bits  (x1.00000 of exact)
+  whole build (fast_sharp)         12.288 ms   182308 bytes (6.54 bits/key)

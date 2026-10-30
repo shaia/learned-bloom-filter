@@ -1,0 +1,47 @@
+bench_cuda: NVIDIA GeForce RTX 4090 Laptop GPU, 76 SMs, 67 MB L2; CPU: 32 hardware threads
+medians; CPU and GPU runs interleave, so compare within a section, not across runs
+
+build: the paper's URL scale -- 223088 keys, 428118 non-keys, N = 1000, k = 5, target FPR 0.01
+  CPU build (one thread)                         4.88 ms
+  GPU build, data already on the GPU             0.89 ms   (5.5x the CPU)
+    of which: two GPU histograms                 0.22 ms
+    of which: threshold search (CPU)             0.56 ms
+    the rest: tables, allocation, insert         0.11 ms
+  copying keys and scores to the GPU             0.84 ms   (pageable memory)
+  GPU filter bit-identical to CPU filter          yes
+
+build: the paper's DNA scale -- 50000000 keys, 50000000 non-keys, N = 1000, k = 5, target FPR 0.01
+  CPU build (one thread)                      6961.12 ms
+  GPU build, data already on the GPU            19.38 ms   (359.2x the CPU)
+    of which: two GPU histograms                 4.44 ms
+    of which: threshold search (CPU)             3.06 ms
+    the rest: tables, allocation, insert        11.87 ms
+  copying keys and scores to the GPU           301.47 ms   (pageable memory)
+  GPU filter bit-identical to CPU filter          yes
+
+query: 4000000 keys, filter 3.4 MB (6.77 bits/key), 100000000 queries, half keys
+  GPU kernel, queries already on the GPU        0.034 ns/query  ( 29.04 G queries/s)
+    + copying queries in (16 B each, pinned)    1.354 ns/query  (11.8 GB/s)
+    + copying answers out (1 B each)            0.093 ns/query
+  GPU, queries starting on the host             1.481 ns/query
+  CPU AVX2 batch, 1 thread                     40.106 ns/query
+  CPU AVX2 batch, all threads                   3.386 ns/query  (32 threads)
+  GPU answers equal CPU answers                   yes
+
+query: 50000000 keys, filter 43.7 MB (6.99 bits/key), 100000000 queries, half keys
+  GPU kernel, queries already on the GPU        0.046 ns/query  ( 21.73 G queries/s)
+    + copying queries in (16 B each, pinned)    1.397 ns/query  (11.5 GB/s)
+    + copying answers out (1 B each)            0.098 ns/query
+  GPU, queries starting on the host             1.541 ns/query
+  CPU AVX2 batch, 1 thread                     49.747 ns/query
+  CPU AVX2 batch, all threads                   2.948 ns/query  (32 threads)
+  GPU answers equal CPU answers                   yes
+
+query: 200000000 keys, filter 169.7 MB (6.79 bits/key), 100000000 queries, half keys
+  GPU kernel, queries already on the GPU        0.187 ns/query  (  5.36 G queries/s)
+    + copying queries in (16 B each, pinned)    1.418 ns/query  (11.3 GB/s)
+    + copying answers out (1 B each)            0.096 ns/query
+  GPU, queries starting on the host             1.701 ns/query
+  CPU AVX2 batch, 1 thread                     74.225 ns/query
+  CPU AVX2 batch, all threads                   6.145 ns/query  (32 threads)
+  GPU answers equal CPU answers                   yes
