@@ -175,6 +175,77 @@ void test_uploaded_filter() {
     }
 }
 
+// The compact query formats on the device: float scores answer as the CPU's
+// contains() on the widened score, and 16-bit segment numbers as contains() on
+// the score they came from. Scores are float values widened, as a model's
+// float32 output would be.
+void test_compact_queries() {
+    section("cuda: float scores and segment numbers answer as the CPU's contains()");
+    workload w = make_workload(200000, 400000, 5);
+    workload unseen = make_workload(0, 1000000, 6);
+    for (auto* v : {&w.key_scores, &w.non_key_scores, &unseen.non_key_scores}) {
+        for (double& s : *v) s = static_cast<float>(s);
+    }
+    options opt;
+    opt.segments = 997;
+    opt.regions = 9;
+    const filter f = filter::build_for_fpr(w.keys, w.key_scores, w.non_key_scores, 0.01, opt);
+    const plbf::cuda::device_filter d(f);
+    std::vector<std::uint64_t> h;
+    std::vector<double> s;
+    make_queries(f, w, unseen, h, s);
+    const std::vector<std::uint8_t> want = host_answers(f, h, s);
+
+    // Float scores: the edge scores from make_queries round to nearby floats,
+    // so compare against contains() on what the floats widen to.
+    std::vector<float> sf(s.size());
+    std::vector<double> widened(s.size());
+    for (std::size_t i = 0; i < s.size(); ++i) widened[i] = sf[i] = static_cast<float>(s[i]);
+    const auto dh = device_buffer<std::uint64_t>::from_host(h);
+    const auto dsf = device_buffer<float>::from_host(sf);
+    device_buffer<std::uint8_t> out(h.size());
+    d.contains(dh.data(), dsf.data(), out.data(), h.size());
+    plbf::cuda::check(cudaDeviceSynchronize(), "contains float");
+    check(out.download() == host_answers(f, h, widened),
+          std::to_string(h.size()) + " float-score queries equal contains() on the widened scores");
+
+    // Segment numbers, converted on the host from the double scores.
+    std::vector<std::uint16_t> seg(s.size());
+    d.to_segments(s, seg);
+    int conv = 0;
+    for (std::size_t i = 0; i < s.size(); ++i) conv += seg[i] != f.grid().index(s[i]);
+    check_eq(conv, 0, "to_segments() equals segment_grid::index()");
+    const auto dseg = device_buffer<std::uint16_t>::from_host(seg);
+    d.contains_segments(dh.data(), dseg.data(), out.data(), h.size());
+    plbf::cuda::check(cudaDeviceSynchronize(), "contains_segments");
+    check(out.download() == want, std::to_string(h.size()) + " segment-number queries equal contains() on the scores");
+
+    // Out-of-range segment numbers clamp as the CPU's contains_segment does.
+    std::vector<std::uint16_t> bad(h.size());
+    std::vector<std::uint8_t> bad_want(h.size());
+    for (std::size_t i = 0; i < h.size(); ++i) {
+        bad[i] = i % 2 ? 0 : static_cast<std::uint16_t>(opt.segments + 1 + i % 1000);
+        bad_want[i] = f.contains_segment(h[i], bad[i]) ? 1 : 0;
+    }
+    const auto dbad = device_buffer<std::uint16_t>::from_host(bad);
+    d.contains_segments(dh.data(), dbad.data(), out.data(), h.size());
+    plbf::cuda::check(cudaDeviceSynchronize(), "contains_segments clamp");
+    check(out.download() == bad_want, "segments 0 and past N clamp as on the CPU");
+
+    // More segments than 16 bits can number: refused, not truncated.
+    options wide;
+    wide.segments = 70000;
+    const filter fw = filter::build_for_fpr(w.keys, w.key_scores, w.non_key_scores, 0.01, wide);
+    const plbf::cuda::device_filter dw(fw);
+    bool threw = false;
+    try {
+        dw.contains_segments(dh.data(), dseg.data(), out.data(), h.size());
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    check(threw, "70,000 segments: contains_segments() refuses rather than truncating");
+}
+
 void test_gpu_build() {
     section("cuda: a GPU-built filter is bit-identical to a CPU-built one");
     const workload w = make_workload(300000, 500000, 3);
@@ -246,6 +317,7 @@ int main() {
     test_segment_index();
     test_histogram();
     test_uploaded_filter();
+    test_compact_queries();
     test_gpu_build();
     return summary("test_cuda");
 }

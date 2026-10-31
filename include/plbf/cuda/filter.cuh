@@ -130,12 +130,17 @@ __device__ __forceinline__ std::uint32_t segment_index(const double* __restrict_
     return i;
 }
 
-// filter::block_for(), as a block index. __umulhi is the multiply-shift of
+// The block for a segment number, 1..N. __umulhi is the multiply-shift of
 // split_block::block_index in one instruction.
-__device__ __forceinline__ unsigned long long block_of(const routing& r, std::uint64_t hash, double score) {
-    const std::uint32_t seg = segment_index(r.thresholds, r.segments, score);
+__device__ __forceinline__ unsigned long long block_of_segment(const routing& r, std::uint64_t hash,
+                                                               std::uint32_t seg) {
     const unsigned long long sl = __ldg(r.slices + __ldg(r.region_of_segment + seg));
     return (sl >> 32) + __umulhi(static_cast<std::uint32_t>(hash >> 32), static_cast<std::uint32_t>(sl));
+}
+
+// filter::block_for(), as a block index.
+__device__ __forceinline__ unsigned long long block_of(const routing& r, std::uint64_t hash, double score) {
+    return block_of_segment(r, hash, segment_index(r.thresholds, r.segments, score));
 }
 
 __device__ __forceinline__ std::uint32_t bit(std::uint32_t x, std::uint32_t salt) {
@@ -211,13 +216,31 @@ __global__ void insert_kernel(routing r, unsigned long long* __restrict__ blocks
     }
 }
 
-template <int Unused = 0>
+// Score is double or float; a float widens to double exactly.
+template <class Score>
 __global__ void contains_kernel(routing r, const uint4* __restrict__ blocks, const std::uint64_t* __restrict__ hashes,
-                                const double* __restrict__ scores, std::uint8_t* __restrict__ out, std::size_t n) {
+                                const Score* __restrict__ scores, std::uint8_t* __restrict__ out, std::size_t n) {
     const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
     for (std::size_t i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < n; i += stride) {
         const std::uint64_t h = hashes[i];
-        out[i] = probe(blocks, block_of(r, h, scores[i]), static_cast<std::uint32_t>(h)) ? 1 : 0;
+        out[i] = probe(blocks, block_of(r, h, static_cast<double>(scores[i])), static_cast<std::uint32_t>(h)) ? 1 : 0;
+    }
+}
+
+// The compact query: a 16-bit segment number in place of the score, clamped
+// to 1..N as filter::contains_segment clamps it.
+template <int Unused = 0>
+__global__ void contains_segment_kernel(routing r, const uint4* __restrict__ blocks,
+                                        const std::uint64_t* __restrict__ hashes,
+                                        const std::uint16_t* __restrict__ segments, std::uint8_t* __restrict__ out,
+                                        std::size_t n) {
+    const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
+    for (std::size_t i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < n; i += stride) {
+        const std::uint64_t h = hashes[i];
+        std::uint32_t seg = segments[i];
+        if (seg < 1) seg = 1;
+        if (seg > r.segments) seg = r.segments;
+        out[i] = probe(blocks, block_of_segment(r, h, seg), static_cast<std::uint32_t>(h)) ? 1 : 0;
     }
 }
 
@@ -287,6 +310,8 @@ public:
     explicit device_filter(const plbf::filter& f)
         : segments_(f.grid().segments()),
           sm_count_(detail::current_sm_count()),
+          grid_(f.grid()),
+          has_avx2_(cpu_has_avx2()),
           layout_(f.regions()),
           keys_per_region_(f.keys_per_region()),
           tables_(f.tables()) {
@@ -320,11 +345,46 @@ public:
     // as 0 or 1. Asynchronous on `stream`, like any kernel launch.
     void contains(const std::uint64_t* hashes, const double* scores, std::uint8_t* out, std::size_t n,
                   cudaStream_t stream = nullptr) const {
-        if (n == 0) return;
-        detail::contains_kernel<<<detail::blocks_for(n, sm_count_), detail::threads_per_block, 0, stream>>>(
-            routing_view(), reinterpret_cast<const uint4*>(blocks_.data()), hashes, scores, out, n);
-        check(cudaGetLastError(), "contains_kernel launch");
+        launch_contains(hashes, scores, out, n, stream);
     }
+
+    // The same for 32-bit scores, widened on the device exactly as
+    // filter::contains_batch widens them: 12 bytes a query cross the link
+    // instead of 16.
+    void contains(const std::uint64_t* hashes, const float* scores, std::uint8_t* out, std::size_t n,
+                  cudaStream_t stream = nullptr) const {
+        launch_contains(hashes, scores, out, n, stream);
+    }
+
+    // The compact query: each query's 16-bit segment number, from
+    // to_segments(), in place of its score, so 10 bytes a query cross the
+    // link. The answers are contains() on the scores the segments came from.
+    // Needs at most segment_grid::max_segments16 segments.
+    void contains_segments(const std::uint64_t* hashes, const std::uint16_t* segments, std::uint8_t* out,
+                           std::size_t n, cudaStream_t stream = nullptr) const {
+        require_segments16();
+        if (n == 0) return;
+        detail::contains_segment_kernel<<<detail::blocks_for(n, sm_count_), detail::threads_per_block, 0, stream>>>(
+            routing_view(), reinterpret_cast<const uint4*>(blocks_.data()), hashes, segments, out, n);
+        check(cudaGetLastError(), "contains_segment_kernel launch");
+    }
+
+    // Scores to 16-bit segment numbers, on the host: AVX2 where the CPU has it.
+    // This moves the score-to-segment step to the CPU, which is the price of
+    // sending 2 bytes instead of 8.
+    void to_segments(std::span<const double> scores, std::span<std::uint16_t> out) const {
+        require_segments16();
+        if (out.size() < scores.size()) throw std::invalid_argument("plbf::cuda: segment span too small");
+#if PLBF_X86_64
+        if (has_avx2_) {
+            grid_.index_batch_avx2(scores.data(), scores.size(), out.data());
+            return;
+        }
+#endif
+        grid_.index_batch(scores.data(), scores.size(), out.data());
+    }
+
+    const segment_grid& grid() const noexcept { return grid_; }
 
     // The same filter on the CPU: same bits, same answers.
     plbf::filter to_host() const {
@@ -342,7 +402,23 @@ public:
     }
 
 private:
-    explicit device_filter(std::size_t segments) : segments_(segments), sm_count_(detail::current_sm_count()) {}
+    explicit device_filter(std::size_t segments)
+        : segments_(segments), sm_count_(detail::current_sm_count()), grid_(segments), has_avx2_(cpu_has_avx2()) {}
+
+    template <class Score>
+    void launch_contains(const std::uint64_t* hashes, const Score* scores, std::uint8_t* out, std::size_t n,
+                         cudaStream_t stream) const {
+        if (n == 0) return;
+        detail::contains_kernel<Score><<<detail::blocks_for(n, sm_count_), detail::threads_per_block, 0, stream>>>(
+            routing_view(), reinterpret_cast<const uint4*>(blocks_.data()), hashes, scores, out, n);
+        check(cudaGetLastError(), "contains_kernel launch");
+    }
+
+    void require_segments16() const {
+        if (segments_ > segment_grid::max_segments16) {
+            throw std::invalid_argument("plbf::cuda: segment numbers need at most 65535 segments");
+        }
+    }
 
     detail::routing routing_view() const noexcept {
         return {thresholds_.data(), region_of_segment_.data(), slices_.data(), static_cast<std::uint32_t>(segments_)};
@@ -402,6 +478,8 @@ private:
 
     std::size_t segments_;
     int sm_count_;  // asked once: cudaDeviceGetAttribute per launch would cost more than a small batch
+    segment_grid grid_;                // host copy, for to_segments()
+    [[maybe_unused]] bool has_avx2_;   // asked once, as plbf::filter does
     plbf::layout layout_;
     std::vector<std::size_t> keys_per_region_;
     region_tables tables_;  // host copy, for to_host() and inspection

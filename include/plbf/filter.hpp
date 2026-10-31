@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -99,27 +100,26 @@ public:
         return split_block::probe_scalar(*block_for(hash, score), static_cast<std::uint32_t>(hash));
     }
 
+    // contains() for a query that carries its segment number (1..N, as
+    // segment_grid::index gives it) in place of its score. Out-of-range
+    // segments are clamped, as out-of-range scores are.
+    bool contains_segment(std::uint64_t hash, std::uint32_t segment) const noexcept {
+        return split_block::probe_scalar(*block_for_segment(hash, segment), static_cast<std::uint32_t>(hash));
+    }
+
     // out[i] = contains(hashes[i], scores[i]), as 0 or 1.
     void contains_batch(std::span<const std::uint64_t> hashes, std::span<const double> scores,
                         std::span<std::uint8_t> out, kernel kern = kernel::automatic) const {
-        if (hashes.size() != scores.size() || out.size() < hashes.size()) {
-            throw std::invalid_argument("plbf::filter: batch spans differ in size");
-        }
-        if (kern == kernel::automatic) kern = has_avx2_ ? kernel::avx2 : kernel::scalar;
-        if (kern == kernel::scalar) {
-            batch_scalar(hashes.data(), scores.data(), out.data(), hashes.size());
-            return;
-        }
-#if PLBF_X86_64
-        if (!has_avx2_) throw std::runtime_error("plbf::filter: no AVX2 on this CPU");
-        if (kern == kernel::avx2) {
-            batch_avx2<true>(hashes.data(), scores.data(), out.data(), hashes.size());
-        } else {
-            batch_avx2<false>(hashes.data(), scores.data(), out.data(), hashes.size());
-        }
-#else
-        throw std::runtime_error("plbf::filter: AVX2 kernels need x86-64");
-#endif
+        batch(hashes, scores, out, kern);
+    }
+
+    // The same for 32-bit scores, as most models emit them. Each score is
+    // widened to double, exactly, so the answer is contains(hash, double(score)):
+    // a filter built from the same values widened gives every key the segment
+    // it was inserted from.
+    void contains_batch(std::span<const std::uint64_t> hashes, std::span<const float> scores,
+                        std::span<std::uint8_t> out, kernel kern = kernel::automatic) const {
+        batch(hashes, scores, out, kern);
     }
 
     // The optimiser's decision: boundaries, per-region FPRs, predicted cost.
@@ -189,6 +189,41 @@ private:
         return &blocks_[region_tables::slice_first(sl) + split_block::block_index(hash, region_tables::slice_count(sl))];
     }
 
+    // block_for() from a segment number the caller computed; the clamp keeps a
+    // bad one in the table, where index() needs none.
+    const split_block::block* block_for_segment(std::uint64_t hash, std::uint32_t segment) const noexcept {
+        const auto n = static_cast<std::uint32_t>(grid_.segments());
+        if (segment < 1) segment = 1;
+        if (segment > n) segment = n;
+        const std::uint64_t sl = tables_.slices[tables_.region_of_segment[segment]];
+        return &blocks_[region_tables::slice_first(sl) + split_block::block_index(hash, region_tables::slice_count(sl))];
+    }
+
+    // The batch kernels, for double or float scores. A float is widened to
+    // double exactly, so both answer as contains() on the widened value.
+    template <class Score>
+    void batch(std::span<const std::uint64_t> hashes, std::span<const Score> scores, std::span<std::uint8_t> out,
+               kernel kern) const {
+        if (hashes.size() != scores.size() || out.size() < hashes.size()) {
+            throw std::invalid_argument("plbf::filter: batch spans differ in size");
+        }
+        if (kern == kernel::automatic) kern = has_avx2_ ? kernel::avx2 : kernel::scalar;
+        if (kern == kernel::scalar) {
+            batch_scalar(hashes.data(), scores.data(), out.data(), hashes.size());
+            return;
+        }
+#if PLBF_X86_64
+        if (!has_avx2_) throw std::runtime_error("plbf::filter: no AVX2 on this CPU");
+        if (kern == kernel::avx2) {
+            batch_avx2<true>(hashes.data(), scores.data(), out.data(), hashes.size());
+        } else {
+            batch_avx2<false>(hashes.data(), scores.data(), out.data(), hashes.size());
+        }
+#else
+        throw std::runtime_error("plbf::filter: AVX2 kernels need x86-64");
+#endif
+    }
+
     static void prefetch(const void* p) noexcept {
 #if PLBF_X86_64
         _mm_prefetch(static_cast<const char*>(p), _MM_HINT_T0);
@@ -201,7 +236,8 @@ private:
 
     // Each batch kernel works a chunk at a time: first plan every probe in the
     // chunk and prefetch its block, then test them all, so the misses overlap.
-    void batch_scalar(const std::uint64_t* hashes, const double* scores, std::uint8_t* out,
+    template <class Score>
+    void batch_scalar(const std::uint64_t* hashes, const Score* scores, std::uint8_t* out,
                       std::size_t n) const noexcept {
         struct probe {
             const split_block::block* block;
@@ -211,7 +247,8 @@ private:
         for (std::size_t base = 0; base < n; base += batch_chunk) {
             const std::size_t len = n - base < batch_chunk ? n - base : batch_chunk;
             for (std::size_t i = 0; i < len; ++i) {
-                plan[i] = {block_for(hashes[base + i], scores[base + i]), static_cast<std::uint32_t>(hashes[base + i])};
+                plan[i] = {block_for(hashes[base + i], static_cast<double>(scores[base + i])),
+                           static_cast<std::uint32_t>(hashes[base + i])};
                 prefetch(plan[i].block);
             }
             for (std::size_t i = 0; i < len; ++i) {
@@ -224,10 +261,18 @@ private:
     // Score to block address, four lanes at a time: segment index (see
     // segment_grid::index4_avx2), then two gathers -- the region, and the
     // region's packed slice -- and the multiply-shift block index on the high
-    // halves of the hashes. Lane for lane it is block_for().
-    PLBF_TARGET_AVX2 void plan4_avx2(const std::uint64_t* hashes, const double* scores,
+    // halves of the hashes. Lane for lane it is block_for(). Float scores are
+    // widened four at a time; the conversion is exact.
+    template <class Score>
+    PLBF_TARGET_AVX2 void plan4_avx2(const std::uint64_t* hashes, const Score* scores,
                                      std::uint64_t* addr) const noexcept {
-        const __m128i seg = grid_.index4_avx2(_mm256_loadu_pd(scores));
+        __m256d s;
+        if constexpr (std::is_same_v<Score, float>) {
+            s = _mm256_cvtps_pd(_mm_loadu_ps(scores));
+        } else {
+            s = _mm256_loadu_pd(scores);
+        }
+        const __m128i seg = grid_.index4_avx2(s);
         const __m128i region = _mm_and_si128(
             _mm_i32gather_epi32(reinterpret_cast<const int*>(tables_.region_of_segment.data()), seg, 2),
             _mm_set1_epi32(0xffff));
@@ -241,8 +286,8 @@ private:
                             _mm256_add_epi64(base, _mm256_slli_epi64(index, 5)));  // 32-byte blocks
     }
 
-    template <bool VectorLookup>
-    PLBF_TARGET_AVX2 void batch_avx2(const std::uint64_t* hashes, const double* scores,
+    template <bool VectorLookup, class Score>
+    PLBF_TARGET_AVX2 void batch_avx2(const std::uint64_t* hashes, const Score* scores,
                                      std::uint8_t* out, std::size_t n) const noexcept {
         static_assert(sizeof(split_block::block) == 32);
         std::uint64_t plan[batch_chunk];
@@ -256,7 +301,8 @@ private:
                 }
             }
             for (; i < len; ++i) {
-                plan[i] = reinterpret_cast<std::uintptr_t>(block_for(hashes[base + i], scores[base + i]));
+                plan[i] = reinterpret_cast<std::uintptr_t>(
+                    block_for(hashes[base + i], static_cast<double>(scores[base + i])));
                 prefetch(reinterpret_cast<const void*>(plan[i]));
             }
             for (i = 0; i < len; ++i) {

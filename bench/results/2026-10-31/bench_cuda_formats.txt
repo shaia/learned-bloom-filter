@@ -1,0 +1,98 @@
+# probe before
+t=  0.5s  compute  1305.7 Mops/s  dram   92.3 ns/load
+t=  1.0s  compute  1238.5 Mops/s  dram   97.6 ns/load
+t=  1.6s  compute  1245.3 Mops/s  dram   94.6 ns/load
+t=  2.1s  compute  1305.1 Mops/s  dram   96.8 ns/load
+t=  2.6s  compute  1251.6 Mops/s  dram  104.2 ns/load
+t=  3.1s  compute   936.8 Mops/s  dram  107.3 ns/load
+t=  3.6s  compute   638.1 Mops/s  dram  108.5 ns/load
+t=  4.2s  compute   657.5 Mops/s  dram  108.7 ns/load
+t=  4.7s  compute   648.4 Mops/s  dram  110.0 ns/load
+t=  5.2s  compute   661.5 Mops/s  dram  111.1 ns/load
+t=  5.7s  compute   626.6 Mops/s  dram  104.1 ns/load
+t=  6.3s  compute   640.0 Mops/s  dram  109.8 ns/load
+t=  6.8s  compute   622.8 Mops/s  dram  107.2 ns/load
+t=  7.3s  compute   677.2 Mops/s  dram  108.8 ns/load
+t=  7.8s  compute   668.5 Mops/s  dram  106.4 ns/load
+t=  8.3s  compute   655.9 Mops/s  dram  108.5 ns/load
+t=  8.9s  compute   566.7 Mops/s  dram  108.0 ns/load
+t=  9.4s  compute   593.2 Mops/s  dram  109.9 ns/load
+t=  9.9s  compute   600.3 Mops/s  dram  115.8 ns/load
+t= 10.4s  compute   597.7 Mops/s  dram  111.8 ns/load
+bench_cuda: NVIDIA GeForce RTX 4090 Laptop GPU, 76 SMs, 67 MB L2; CPU: 32 hardware threads
+medians; CPU and GPU runs interleave, so compare within a section, not across runs
+
+build: the paper's URL scale -- 223088 keys, 428118 non-keys, N = 1000, k = 5, target FPR 0.01
+  CPU build (one thread)                         4.13 ms
+  GPU build, data already on the GPU             0.73 ms   (5.7x the CPU)
+    of which: two GPU histograms                 0.09 ms
+    of which: threshold search (CPU)             0.45 ms
+    the rest: tables, allocation, insert         0.19 ms
+  copying keys and scores to the GPU             0.72 ms   (pageable memory)
+  GPU filter bit-identical to CPU filter          yes
+
+build: the paper's DNA scale -- 50000000 keys, 50000000 non-keys, N = 1000, k = 5, target FPR 0.01
+  CPU build (one thread)                      2621.44 ms
+  GPU build, data already on the GPU            15.42 ms   (170.0x the CPU)
+    of which: two GPU histograms                 3.92 ms
+    of which: threshold search (CPU)             0.91 ms
+    the rest: tables, allocation, insert        10.59 ms
+  copying keys and scores to the GPU           184.87 ms   (pageable memory)
+  GPU filter bit-identical to CPU filter          yes
+
+query: 4000000 keys, filter 3.4 MB (6.77 bits/key), 100000000 queries, half keys
+  GPU kernel, queries already on the GPU        0.039 ns/query  ( 25.92 G queries/s)
+    + copying queries in (16 B each, pinned)    1.332 ns/query  (12.0 GB/s)
+    + copying answers out (1 B each)            0.088 ns/query
+  GPU, queries starting on the host             1.459 ns/query
+  GPU, f32 scores from the host (12 B in)       1.124 ns/query  (in 1.008, kernel 0.026, out 0.089)
+  GPU, segment numbers from the host (10 B in)    0.932 ns/query  (in 0.820, kernel 0.022, out 0.090)
+    + scores to segment numbers on the CPU      1.171 ns/query  (1 thread, AVX2)
+  CPU AVX2 batch, 1 thread                      3.219 ns/query
+  CPU AVX2 batch, all threads                   0.421 ns/query  (32 threads)
+  GPU answers equal CPU answers                   yes
+
+query: 50000000 keys, filter 43.7 MB (6.99 bits/key), 100000000 queries, half keys
+  GPU kernel, queries already on the GPU        0.046 ns/query  ( 21.54 G queries/s)
+    + copying queries in (16 B each, pinned)    1.343 ns/query  (11.9 GB/s)
+    + copying answers out (1 B each)            0.087 ns/query
+  GPU, queries starting on the host             1.476 ns/query
+  GPU, f32 scores from the host (12 B in)       1.126 ns/query  (in 0.996, kernel 0.041, out 0.088)
+  GPU, segment numbers from the host (10 B in)    0.939 ns/query  (in 0.819, kernel 0.034, out 0.086)
+    + scores to segment numbers on the CPU      1.029 ns/query  (1 thread, AVX2)
+  CPU AVX2 batch, 1 thread                      6.687 ns/query
+  CPU AVX2 batch, all threads                   0.825 ns/query  (32 threads)
+  GPU answers equal CPU answers                   yes
+
+query: 200000000 keys, filter 169.7 MB (6.79 bits/key), 100000000 queries, half keys
+  GPU kernel, queries already on the GPU        0.178 ns/query  (  5.61 G queries/s)
+    + copying queries in (16 B each, pinned)    1.325 ns/query  (12.1 GB/s)
+    + copying answers out (1 B each)            0.085 ns/query
+  GPU, queries starting on the host             1.589 ns/query
+  GPU, f32 scores from the host (12 B in)       1.250 ns/query  (in 0.989, kernel 0.175, out 0.086)
+  GPU, segment numbers from the host (10 B in)    1.085 ns/query  (in 0.826, kernel 0.173, out 0.086)
+    + scores to segment numbers on the CPU      1.081 ns/query  (1 thread, AVX2)
+  CPU AVX2 batch, 1 thread                      7.669 ns/query
+  CPU AVX2 batch, all threads                   1.058 ns/query  (32 threads)
+  GPU answers equal CPU answers                   yes
+# probe after
+t=  0.5s  compute  1233.6 Mops/s  dram   99.6 ns/load
+t=  1.0s  compute  1147.3 Mops/s  dram  105.5 ns/load
+t=  1.6s  compute  1278.8 Mops/s  dram   97.0 ns/load
+t=  2.1s  compute  1286.4 Mops/s  dram   95.9 ns/load
+t=  2.6s  compute  1281.1 Mops/s  dram   98.9 ns/load
+t=  3.1s  compute  1263.2 Mops/s  dram  100.5 ns/load
+t=  3.6s  compute  1259.7 Mops/s  dram   98.8 ns/load
+t=  4.2s  compute  1266.1 Mops/s  dram   96.5 ns/load
+t=  4.7s  compute  1224.4 Mops/s  dram   96.7 ns/load
+t=  5.2s  compute  1235.8 Mops/s  dram   99.0 ns/load
+t=  5.7s  compute  1212.0 Mops/s  dram   98.0 ns/load
+t=  6.2s  compute  1222.3 Mops/s  dram  102.4 ns/load
+t=  6.8s  compute  1144.4 Mops/s  dram   99.0 ns/load
+t=  7.3s  compute  1268.2 Mops/s  dram   97.3 ns/load
+t=  7.8s  compute  1189.3 Mops/s  dram  100.6 ns/load
+t=  8.3s  compute  1245.3 Mops/s  dram   95.6 ns/load
+t=  8.8s  compute  1271.3 Mops/s  dram   97.2 ns/load
+t=  9.4s  compute  1242.0 Mops/s  dram   98.7 ns/load
+t=  9.9s  compute  1227.8 Mops/s  dram   98.5 ns/load
+t= 10.4s  compute  1248.7 Mops/s  dram   95.6 ns/load

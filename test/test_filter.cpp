@@ -159,6 +159,96 @@ void test_batch_kernels_agree() {
     check_eq(mismatches, 0, std::to_string(runs) + " kernel x length runs identical to contains()");
 }
 
+// The compact query formats: 32-bit scores answer as contains() on the score
+// widened to double, and 16-bit segment numbers as contains() on the score the
+// segment came from. The filter is built from float scores widened, as a
+// model's float32 output would be.
+void test_compact_queries() {
+    section("filter: float scores and segment numbers answer as contains()");
+    std::mt19937_64 rng(29);
+    std::uniform_real_distribution<double> u(0, 1);
+    std::vector<std::uint64_t> keys(30000);
+    std::vector<float> key_f(keys.size());
+    std::vector<double> key_scores(keys.size()), non_key_scores(60000);
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        keys[i] = hash_u64(i);
+        key_f[i] = static_cast<float>(std::pow(u(rng), 0.25));
+        key_scores[i] = key_f[i];
+    }
+    for (auto& s : non_key_scores) s = static_cast<float>(1 - std::sqrt(u(rng)));
+    options opt;
+    opt.segments = 997;
+    opt.regions = 9;
+    const filter f = filter::build_for_fpr(keys, key_scores, non_key_scores, 0.01, opt);
+    const segment_grid& grid = f.grid();
+
+    // Keys at their float scores, then unseen hashes at every threshold rounded
+    // to float and the floats either side of it, then the values index() clamps.
+    std::vector<std::uint64_t> qh(keys);
+    std::vector<float> qf(key_f);
+    constexpr float finf = std::numeric_limits<float>::infinity();
+    std::vector<float> edges = {0.0f, -0.0f, 1.0f, -1.0f, 2.0f, finf, -finf, std::nanf("")};
+    for (std::size_t i = 0; i <= grid.segments(); ++i) {
+        const auto t = static_cast<float>(grid.threshold(i));
+        edges.insert(edges.end(), {std::nextafter(t, -1.0f), t, std::nextafter(t, 2.0f)});
+    }
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        qh.push_back(hash_u64(2'000'000 + i));
+        qf.push_back(edges[i]);
+    }
+    std::vector<std::uint8_t> want(qh.size());
+    for (std::size_t i = 0; i < qh.size(); ++i) want[i] = f.contains(qh[i], static_cast<double>(qf[i])) ? 1 : 0;
+
+    std::size_t missed = 0;
+    for (std::size_t i = 0; i < keys.size(); ++i) missed += want[i] == 0;
+    check_eq(missed, 0, "every key found from its float score");
+
+    int mismatches = 0, runs = 0;
+    for (const kernel kern : {kernel::scalar, kernel::avx2, kernel::avx2_probe}) {
+        if (kern != kernel::scalar && !cpu_has_avx2()) continue;
+        std::vector<std::uint8_t> got(qh.size(), 2);
+        f.contains_batch(qh, qf, got, kern);
+        if (got != want) ++mismatches;
+        ++runs;
+    }
+    check_eq(mismatches, 0, std::to_string(runs) + " float-score kernels identical to contains() on the widened scores");
+
+    // Segment numbers: on double edge scores, every threshold's neighbours.
+    const std::vector<double> ds = edge_scores(grid, rng, 20000);
+    int seg_mismatches = 0;
+    for (std::size_t i = 0; i < ds.size(); ++i) {
+        const std::uint64_t h = hash_u64(3'000'000 + i);
+        const auto seg = static_cast<std::uint32_t>(grid.index(ds[i]));
+        if (f.contains_segment(h, seg) != f.contains(h, ds[i])) ++seg_mismatches;
+    }
+    check_eq(seg_mismatches, 0, std::to_string(ds.size()) + " segment-number queries identical to contains()");
+
+    int clamp_mismatches = 0;
+    const auto n = static_cast<std::uint32_t>(grid.segments());
+    for (std::uint64_t i = 0; i < 10000; ++i) {
+        const std::uint64_t h = hash_u64(4'000'000 + i);
+        if (f.contains_segment(h, 0) != f.contains_segment(h, 1)) ++clamp_mismatches;
+        if (f.contains_segment(h, n + 7) != f.contains_segment(h, n)) ++clamp_mismatches;
+    }
+    check_eq(clamp_mismatches, 0, "segment 0 answers as 1, and segments past N as N");
+
+    // The 16-bit batch conversions equal index(), with ragged tails.
+    int conv_mismatches = 0;
+    for (const std::size_t len : {ds.size(), ds.size() - 1, ds.size() - 2, ds.size() - 3}) {
+        std::vector<std::uint16_t> got(len, 0xffff);
+        grid.index_batch(ds.data(), len, got.data());
+        for (std::size_t i = 0; i < len; ++i) conv_mismatches += got[i] != grid.index(ds[i]);
+#if PLBF_X86_64
+        if (cpu_has_avx2()) {
+            std::fill(got.begin(), got.end(), std::uint16_t{0xffff});
+            grid.index_batch_avx2(ds.data(), len, got.data());
+            for (std::size_t i = 0; i < len; ++i) conv_mismatches += got[i] != grid.index(ds[i]);
+        }
+#endif
+    }
+    check_eq(conv_mismatches, 0, "16-bit segment numbers, scalar and AVX2, equal index()");
+}
+
 // --- split-block kernels and sizing -----------------------------------------
 
 void test_kernels_agree() {
@@ -428,6 +518,7 @@ int main() {
     test_segment_index_avx2();
     test_kernels_agree();
     test_batch_kernels_agree();
+    test_compact_queries();
     test_fpr_model();
     test_region_mapping();
     test_from_parts();

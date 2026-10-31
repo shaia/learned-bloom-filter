@@ -1,0 +1,31 @@
+# tools/pcie.cu with three query formats, five runs in a row, 2026-10-31T05:29Z
+=== run 1
+query format           bytes                copy in     kernel   copy out from the host
+hash + double score       16    1.286 ns   12.4 GB/s   0.033 ns   0.079 ns     1.397 ns
+hash + float score        12    0.967 ns   12.4 GB/s   0.032 ns   0.079 ns     1.078 ns
+hash + 16-bit segment     10    0.807 ns   12.4 GB/s   0.031 ns   0.079 ns     0.916 ns
+answers equal the CPU's: yes (0 wrong; 51.4% present)
+=== run 2
+query format           bytes                copy in     kernel   copy out from the host
+hash + double score       16    1.289 ns   12.4 GB/s   0.030 ns   0.079 ns     1.398 ns
+hash + float score        12    0.967 ns   12.4 GB/s   0.030 ns   0.079 ns     1.077 ns
+hash + 16-bit segment     10    0.806 ns   12.4 GB/s   0.030 ns   0.079 ns     0.915 ns
+answers equal the CPU's: yes (0 wrong; 51.4% present)
+=== run 3
+query format           bytes                copy in     kernel   copy out from the host
+hash + double score       16    1.286 ns   12.4 GB/s   0.030 ns   0.081 ns     1.397 ns
+hash + float score        12    0.970 ns   12.4 GB/s   0.030 ns   0.079 ns     1.079 ns
+hash + 16-bit segment     10    0.808 ns   12.4 GB/s   0.030 ns   0.079 ns     0.917 ns
+answers equal the CPU's: yes (0 wrong; 51.4% present)
+=== run 4
+query format           bytes                copy in     kernel   copy out from the host
+hash + double score       16    1.285 ns   12.4 GB/s   0.031 ns   0.079 ns     1.396 ns
+hash + float score        12    0.962 ns   12.5 GB/s   0.030 ns   0.079 ns     1.071 ns
+hash + 16-bit segment     10    0.805 ns   12.4 GB/s   0.030 ns   0.079 ns     0.914 ns
+answers equal the CPU's: yes (0 wrong; 51.4% present)
+=== run 5
+query format           bytes                copy in     kernel   copy out from the host
+hash + double score       16    1.281 ns   12.5 GB/s   0.030 ns   0.079 ns     1.390 ns
+hash + float score        12    0.962 ns   12.5 GB/s   0.030 ns   0.079 ns     1.070 ns
+hash + 16-bit segment     10    0.805 ns   12.4 GB/s   0.032 ns   0.079 ns     0.915 ns
+answers equal the CPU's: yes (0 wrong; 51.4% present)

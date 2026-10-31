@@ -38,6 +38,10 @@ public:
     std::size_t segments() const noexcept { return thresholds_.size() - 1; }
     double threshold(std::size_t i) const noexcept { return thresholds_[i]; }
 
+    // The most segments a 16-bit segment number can name: the limit for the
+    // compact query format, a 2-byte segment in place of an 8-byte score.
+    static constexpr std::size_t max_segments16 = 65535;
+
     // Smallest i with threshold(i) >= score, but at least 1: the reference's
     // bisect_left plus its "0 maps to segment 1" rule.
     //
@@ -95,7 +99,25 @@ public:
         }
         for (; i < count; ++i) out[i] = static_cast<std::uint32_t>(index(scores[i]));
     }
+
+    // The same as 16-bit segment numbers; needs segments() <= max_segments16,
+    // which the caller checks.
+    PLBF_TARGET_AVX2 void index_batch_avx2(const double* scores, std::size_t count,
+                                           std::uint16_t* out) const noexcept {
+        std::size_t i = 0;
+        for (; i + 4 <= count; i += 4) {
+            const __m128i s = index4_avx2(_mm256_loadu_pd(scores + i));
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(out + i), _mm_packus_epi32(s, s));
+        }
+        for (; i < count; ++i) out[i] = static_cast<std::uint16_t>(index(scores[i]));
+    }
 #endif
+
+    // out[i] = index(scores[i]) as a 16-bit segment number, one at a time; for
+    // CPUs without AVX2. Needs segments() <= max_segments16.
+    void index_batch(const double* scores, std::size_t count, std::uint16_t* out) const noexcept {
+        for (std::size_t i = 0; i < count; ++i) out[i] = static_cast<std::uint16_t>(index(scores[i]));
+    }
 
 private:
     std::vector<double> thresholds_;

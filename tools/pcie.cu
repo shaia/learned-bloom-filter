@@ -1,6 +1,15 @@
-// What a query that starts on the CPU costs a GPU filter: 16 bytes in, the
-// probe, 1 byte out. The filter is a plain split-block filter with the Parquet
-// salts, as in Part 9; the answers are checked against the CPU's.
+// What a query that starts on the CPU costs a GPU filter, in three query
+// formats: the 8-byte hash with an 8-byte double score (16 B), with a 4-byte
+// float score (12 B), or with a 2-byte segment number (10 B); 1 byte of answer
+// comes back. The filter is a plain split-block filter with the Parquet salts,
+// as in Part 9 of the blog series, so the kernel reads only the hash: the score
+// or segment crosses the link as it would for the learned filter, which is the
+// cost this measures. bench/bench_cuda.cu times the library's real kernels for
+// the same formats. The formats run interleaved in one process, so they share
+// the link's state, and every answer is checked against the CPU's.
+//
+// Version e2a8ec4 of this file is the Part 10 reducer, which sent one
+// 16-byte struct per query; bench/results/2026-10-30/pcie_ten_runs.txt is it.
 //   nvcc -O3 -std=c++17 pcie.cu -o pcie && ./pcie
 #include <cuda_runtime.h>
 
@@ -16,11 +25,6 @@
             return 1;                                                             \
         }                                                                         \
     } while (0)
-
-struct query {
-    std::uint64_t hash;
-    double score;  // unused by a plain filter, but it crosses the bus all the same
-};
 
 __host__ __device__ inline std::uint64_t mix(std::uint64_t x) {  // splitmix64's finaliser
     x ^= x >> 30; x *= 0xbf58476d1ce4e5b9ULL;
@@ -38,18 +42,18 @@ __host__ __device__ inline bool probe(const std::uint32_t* blocks, std::uint32_t
     return missing == 0;
 }
 
-__global__ void answer(const std::uint32_t* blocks, std::uint32_t count, const query* q, std::uint8_t* out,
-                       std::size_t n) {
+__global__ void answer(const std::uint32_t* blocks, std::uint32_t count, const std::uint64_t* hashes,
+                       std::uint8_t* out, std::size_t n) {
     for (std::size_t i = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; i < n;
          i += std::size_t(blockDim.x) * gridDim.x) {
-        out[i] = probe(blocks, count, q[i].hash);
+        out[i] = probe(blocks, count, hashes[i]);
     }
 }
 
 int main() {
     // 4 million keys in 131,072 blocks: a 4 MB filter, about 8.4 bits a key.
     const std::uint32_t count = 131072;
-    const std::size_t keys = 4000000, n = 32 << 20;  // 32 Mi queries: 512 MB in, 32 MB out
+    const std::size_t keys = 4000000, n = 32 << 20;  // 32 Mi queries
     std::vector<std::uint32_t> blocks(8 * std::size_t(count), 0);
     const std::uint32_t salt[8] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
                                    0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U};
@@ -59,54 +63,81 @@ int main() {
         for (int i = 0; i < 8; ++i) b[i] |= 1U << ((std::uint32_t(h) * salt[i]) >> 27);
     }
 
-    query* hq;  // pinned host memory: what the link really runs at
+    // Pinned host memory, one array per field: a struct would pad 12 bytes to 16.
+    std::uint64_t* hh;
+    double* hd;
+    float* hf;
+    std::uint16_t* hs;
     std::uint8_t* ha;
-    CHECK(cudaMallocHost(&hq, n * sizeof(query)));
+    CHECK(cudaMallocHost(&hh, n * 8));
+    CHECK(cudaMallocHost(&hd, n * 8));
+    CHECK(cudaMallocHost(&hf, n * 4));
+    CHECK(cudaMallocHost(&hs, n * 2));
     CHECK(cudaMallocHost(&ha, n));
-    for (std::size_t i = 0; i < n; ++i) hq[i] = {i % 2 ? mix(i / 2 % keys) : mix((1ULL << 40) + i), 0.5};  // half keys
+    for (std::size_t i = 0; i < n; ++i) {
+        hh[i] = i % 2 ? mix(i / 2 % keys) : mix((1ULL << 40) + i);  // half keys
+        hd[i] = double(i % 1000) / 1000;
+        hf[i] = float(hd[i]);
+        hs[i] = std::uint16_t(i % 1000 + 1);
+    }
 
     std::uint32_t* db;
-    query* dq;
+    std::uint64_t* dh;
+    void* dp;  // the payload: scores or segments, the largest is 8 bytes
     std::uint8_t* da;
     CHECK(cudaMalloc(&db, blocks.size() * 4));
-    CHECK(cudaMalloc(&dq, n * sizeof(query)));
+    CHECK(cudaMalloc(&dh, n * 8));
+    CHECK(cudaMalloc(&dp, n * 8));
     CHECK(cudaMalloc(&da, n));
     CHECK(cudaMemcpy(db, blocks.data(), blocks.size() * 4, cudaMemcpyHostToDevice));
 
+    struct format {
+        const char* name;
+        const void* payload;
+        std::size_t bytes;  // payload bytes per query
+        std::vector<float> in, kernel, out;
+    };
+    std::vector<format> formats = {{"hash + double score", hd, 8, {}, {}, {}},
+                                   {"hash + float score", hf, 4, {}, {}, {}},
+                                   {"hash + 16-bit segment", hs, 2, {}, {}, {}}};
     cudaEvent_t t0, t1, t2, t3;
     for (cudaEvent_t* ev : {&t0, &t1, &t2, &t3}) CHECK(cudaEventCreate(ev));
-    std::vector<float> in, kernel, out;
+    std::size_t wrong = 0, present = 0;
     for (int rep = 0; rep < 7; ++rep) {
-        CHECK(cudaEventRecord(t0));
-        CHECK(cudaMemcpy(dq, hq, n * sizeof(query), cudaMemcpyHostToDevice));
-        CHECK(cudaEventRecord(t1));
-        answer<<<1024, 256>>>(db, count, dq, da, n);
-        CHECK(cudaEventRecord(t2));
-        CHECK(cudaMemcpy(ha, da, n, cudaMemcpyDeviceToHost));
-        CHECK(cudaEventRecord(t3));
-        CHECK(cudaEventSynchronize(t3));
-        float a, b, c;
-        CHECK(cudaEventElapsedTime(&a, t0, t1));
-        CHECK(cudaEventElapsedTime(&b, t1, t2));
-        CHECK(cudaEventElapsedTime(&c, t2, t3));
-        in.push_back(a), kernel.push_back(b), out.push_back(c);
+        for (format& f : formats) {
+            CHECK(cudaEventRecord(t0));
+            CHECK(cudaMemcpy(dh, hh, n * 8, cudaMemcpyHostToDevice));
+            CHECK(cudaMemcpy(dp, f.payload, n * f.bytes, cudaMemcpyHostToDevice));
+            CHECK(cudaEventRecord(t1));
+            answer<<<1024, 256>>>(db, count, dh, da, n);
+            CHECK(cudaEventRecord(t2));
+            CHECK(cudaMemcpy(ha, da, n, cudaMemcpyDeviceToHost));
+            CHECK(cudaEventRecord(t3));
+            CHECK(cudaEventSynchronize(t3));
+            float a, b, c;
+            CHECK(cudaEventElapsedTime(&a, t0, t1));
+            CHECK(cudaEventElapsedTime(&b, t1, t2));
+            CHECK(cudaEventElapsedTime(&c, t2, t3));
+            f.in.push_back(a), f.kernel.push_back(b), f.out.push_back(c);
+            if (rep == 0) {
+                for (std::size_t i = 0; i < n; ++i) {
+                    wrong += ha[i] != std::uint8_t(probe(blocks.data(), count, hh[i]));
+                    present += ha[i];
+                }
+            }
+        }
     }
     auto median_ns = [&](std::vector<float> v) {
         std::sort(v.begin(), v.end());
         return v[v.size() / 2] * 1e6 / double(n);  // ms per batch -> ns per query
     };
-    const double ns_in = median_ns(in), ns_kernel = median_ns(kernel), ns_out = median_ns(out);
-
-    std::size_t wrong = 0, present = 0;
-    for (std::size_t i = 0; i < n; ++i) {
-        wrong += ha[i] != std::uint8_t(probe(blocks.data(), count, hq[i].hash));
-        present += ha[i];
+    std::printf("%-22s %5s %22s %10s %10s %12s\n", "query format", "bytes", "copy in", "kernel", "copy out",
+                "from the host");
+    for (const format& f : formats) {
+        const double in = median_ns(f.in), k = median_ns(f.kernel), out = median_ns(f.out);
+        std::printf("%-22s %5zu %8.3f ns %6.1f GB/s %7.3f ns %7.3f ns %9.3f ns\n", f.name, 8 + f.bytes, in,
+                    double(8 + f.bytes) / in, k, out, in + k + out);
     }
-    std::printf("copy in:  %.3f ns per 16-byte query (%.1f GB/s)\n", ns_in, 16 / ns_in);
-    std::printf("kernel:   %.3f ns per query\n", ns_kernel);
-    std::printf("copy out: %.3f ns per 1-byte answer (%.1f GB/s)\n", ns_out, 1 / ns_out);
-    std::printf("a query that starts on the host: %.3f ns, %.0f%% of it the kernel\n", ns_in + ns_kernel + ns_out,
-                100 * ns_kernel / (ns_in + ns_kernel + ns_out));
     std::printf("answers equal the CPU's: %s (%zu wrong; %.1f%% present)\n", wrong ? "no" : "yes", wrong,
-                100.0 * double(present) / double(n));
+                100.0 * double(present) / double(3 * n));
 }

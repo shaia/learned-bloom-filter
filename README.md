@@ -60,6 +60,11 @@ bool maybe = f.contains(plbf::hash_bytes(query), model(query));
 
 // Or many at once: prefetched, AVX2 where the CPU has it.
 f.contains_batch(hashes, scores, out);   // out[i] is 0 or 1
+
+// Scores as 32-bit floats, as most models emit them: each is widened to
+// double exactly, so build from the same values widened and every key is
+// looked up in the segment it was inserted from.
+f.contains_batch(hashes, float_scores, out);
 ```
 
 `build_for_memory` takes a bit budget instead and minimises the expected FPR.
@@ -87,6 +92,20 @@ plbf::filter f = d.to_host();               // the same filter, on the CPU
 ```
 
 `plbf::cuda::device_filter(f)` uploads a filter built on the CPU instead.
+
+When the queries start on the CPU, the copy over PCIe costs far more than the
+GPU's answer, so the GPU filter takes two smaller query formats as well as the
+16-byte hash and double score:
+
+```cpp
+d.contains(d_hashes, d_float_scores, d_out, n);   // 12 bytes a query
+d.to_segments(scores, segments);                  // on the host: score -> 16-bit segment
+d.contains_segments(d_hashes, d_segments, d_out, n);   // 10 bytes a query
+```
+
+The segment format moves the score-to-segment step to the CPU, and needs at
+most 65,535 segments (`segment_grid::max_segments16`). Both give the same
+answers as the double path on the same scores.
 
 ## Build and test
 
@@ -238,6 +257,14 @@ size here. GPU queries therefore make sense when the scores come from a model
 that runs on the GPU. When queries arrive on the CPU, the multithreaded AVX2
 batch is the faster path.
 
+Smaller query formats narrow the gap but do not close it on this link
+(`bench/results/2026-10-31/`). Sending 32-bit scores (12 bytes a query) or
+16-bit segment numbers (10 bytes) cuts a host-side GPU query from 1.46 to 1.12
+and 0.93 ns with the 3.4 MB filter, against 0.42 ns for 32 CPU threads in the
+same run. With the 170 MB filter the segment format is within 3% of the CPU
+(1.09 against 1.06 ns), and it adds about 1 ns per query of score-to-segment
+work on one CPU thread.
+
 ## Design notes
 
 - **Bit-exact parity is deliberate.** Every expression is evaluated in the
@@ -323,8 +350,9 @@ python -I tools/gen_golden.py path/to/FastPLBF --out-dir test
   Run it before trusting a benchmark on a laptop: the first attempt at recording
   `bench/results/2026-10-30/` ran up to 10× slow once the CPU throttled, within 5 seconds of load,
   and only this showed it.
-- **`tools/pcie.cu`** measures what a query that starts on the CPU costs a GPU filter: the copy
-  in, the probe and the copy out. It is the reducer from Part 10 of the blog series.
+- **`tools/pcie.cu`** measures what a query that starts on the CPU costs a GPU filter, in three
+  query formats (16, 12 and 10 bytes): the copy in, the probe and the copy out. Its version at
+  `e2a8ec4` is the reducer from Part 10 of the blog series.
 
 Raw benchmark outputs, with the machine and its power state, live in `bench/results/<date>/`.
 

@@ -134,30 +134,45 @@ void bench_query(std::size_t n_keys, std::size_t n_queries) {
     const std::size_t n_train = std::min<std::size_t>(n_keys * 2, 4000000);
     const workload w = make_workload(n_keys, n_train, shape::ideal, 1);
     const workload unseen = make_workload(0, n_queries / 2 + 1, shape::ideal, 2, 1ULL << 40);
+    // Every score rounded to float, as a model's float32 output would be, so the
+    // float and segment-number formats below answer exactly as the double one.
+    const auto as_float = [](std::vector<double> v) {
+        for (double& s : v) s = static_cast<float>(s);
+        return v;
+    };
+    const std::vector<double> key_scores = as_float(w.key_scores), non_key_scores = as_float(w.non_key_scores);
+    const std::vector<double> unseen_scores = as_float(unseen.non_key_scores);
 
     // Build on the GPU, then bring a copy back for the CPU side of the comparison.
     plbf::cuda::device_filter gpu = [&] {
         const auto dk = device_buffer<std::uint64_t>::from_host(w.keys);
-        const auto dks = device_buffer<double>::from_host(w.key_scores);
-        const auto dns = device_buffer<double>::from_host(w.non_key_scores);
+        const auto dks = device_buffer<double>::from_host(key_scores);
+        const auto dns = device_buffer<double>::from_host(non_key_scores);
         return plbf::cuda::device_filter::build_for_fpr(dk.data(), dks.data(), n_keys, dns.data(), n_train, 0.01);
     }();
     const filter cpu = gpu.to_host();
 
     pinned<std::uint64_t> qh(n_queries);
     pinned<double> qs(n_queries);
+    pinned<float> qf(n_queries);
+    pinned<std::uint16_t> qseg(n_queries);
     pinned<std::uint8_t> out(n_queries);
     std::mt19937_64 rng(99);
     for (std::size_t i = 0; i < n_queries; ++i) {
         if (i % 2 == 0) {
             const std::size_t j = rng() % n_keys;
             qh.p[i] = w.keys[j];
-            qs.p[i] = w.key_scores[j];
+            qs.p[i] = key_scores[j];
         } else {
             qh.p[i] = unseen.non_keys[i / 2];
-            qs.p[i] = unseen.non_key_scores[i / 2];
+            qs.p[i] = unseen_scores[i / 2];
         }
+        qf.p[i] = static_cast<float>(qs.p[i]);
     }
+    // The segment-number format moves the score-to-segment step to the CPU; time it.
+    const double t_seg = median_ms(3, [&] {
+        gpu.to_segments(std::span<const double>(qs.p, n_queries), std::span<std::uint16_t>(qseg.p, n_queries));
+    });
 
     std::printf("\nquery: %zu keys, filter %.1f MB (%.2f bits/key), %zu queries, half keys\n", n_keys,
                 static_cast<double>(cpu.memory_bytes()) / 1e6,
@@ -165,20 +180,38 @@ void bench_query(std::size_t n_keys, std::size_t n_queries) {
 
     device_buffer<std::uint64_t> dh(n_queries);
     device_buffer<double> ds(n_queries);
+    device_buffer<float> dsf(n_queries);
+    device_buffer<std::uint16_t> dseg(n_queries);
     device_buffer<std::uint8_t> dout(n_queries);
     gpu_timer t;
-    std::vector<double> h2d, kern, d2h;
-    for (int rep = 0; rep < 7; ++rep) {
-        h2d.push_back(t.ms([&] {
+    // One query format per row; the three interleave within each round, so
+    // they share the link's state.
+    struct format {
+        std::vector<double> h2d, kern, d2h;
+        std::vector<std::uint8_t> answers;
+    };
+    format f64, f32, s16;
+    const auto run_format = [&](format& f, std::size_t payload_bytes, const void* host, void* dev, auto launch) {
+        f.h2d.push_back(t.ms([&] {
             check(cudaMemcpyAsync(dh.data(), qh.p, n_queries * sizeof(std::uint64_t), cudaMemcpyHostToDevice), "H2D");
-            check(cudaMemcpyAsync(ds.data(), qs.p, n_queries * sizeof(double), cudaMemcpyHostToDevice), "H2D");
+            check(cudaMemcpyAsync(dev, host, n_queries * payload_bytes, cudaMemcpyHostToDevice), "H2D");
         }));
-        kern.push_back(t.ms([&] { gpu.contains(dh.data(), ds.data(), dout.data(), n_queries); }));
-        d2h.push_back(t.ms([&] {
+        f.kern.push_back(t.ms(launch));
+        f.d2h.push_back(t.ms([&] {
             check(cudaMemcpyAsync(out.p, dout.data(), n_queries, cudaMemcpyDeviceToHost), "D2H");
         }));
+        f.answers.assign(out.p, out.p + n_queries);
+    };
+    for (int rep = 0; rep < 7; ++rep) {
+        run_format(f64, sizeof(double), qs.p, ds.data(), [&] { gpu.contains(dh.data(), ds.data(), dout.data(), n_queries); });
+        run_format(f32, sizeof(float), qf.p, dsf.data(), [&] { gpu.contains(dh.data(), dsf.data(), dout.data(), n_queries); });
+        run_format(s16, sizeof(std::uint16_t), qseg.p, dseg.data(),
+                   [&] { gpu.contains_segments(dh.data(), dseg.data(), dout.data(), n_queries); });
     }
-    const std::vector<std::uint8_t> gpu_answers(out.p, out.p + n_queries);
+    const std::vector<double>& h2d = f64.h2d;
+    const std::vector<double>& kern = f64.kern;
+    const std::vector<double>& d2h = f64.d2h;
+    const std::vector<std::uint8_t>& gpu_answers = f64.answers;
 
     // CPU: the AVX2 batch on one thread, then on every hardware thread, each
     // taking a contiguous share. contains_batch is const and touches no
@@ -201,7 +234,7 @@ void bench_query(std::size_t n_keys, std::size_t n_queries) {
     const unsigned hw = std::max(1U, std::thread::hardware_concurrency());
     const double t_cpu1 = median_ms(3, [&] { run_cpu(1); });
     const double t_cpun = median_ms(5, [&] { run_cpu(hw); });
-    const bool agree = cpu_answers == gpu_answers;
+    const bool agree = cpu_answers == gpu_answers && f32.answers == gpu_answers && s16.answers == gpu_answers;
 
     const auto ns = [&](double ms) { return ms * 1e6 / static_cast<double>(n_queries); };
     const double k_ms = median(kern), up = median(h2d), down = median(d2h);
@@ -211,6 +244,14 @@ void bench_query(std::size_t n_keys, std::size_t n_queries) {
                 static_cast<double>(n_queries) * 16 / (up * 1e6));
     std::printf("  %-42s %8.3f ns/query\n", "  + copying answers out (1 B each)", ns(down));
     std::printf("  %-42s %8.3f ns/query\n", "GPU, queries starting on the host", ns(up + k_ms + down));
+    const auto host_row = [&](const char* label, const format& f) {
+        const double up_f = median(f.h2d), k_f = median(f.kern), down_f = median(f.d2h);
+        std::printf("  %-42s %8.3f ns/query  (in %.3f, kernel %.3f, out %.3f)\n", label, ns(up_f + k_f + down_f),
+                    ns(up_f), ns(k_f), ns(down_f));
+    };
+    host_row("GPU, f32 scores from the host (12 B in)", f32);
+    host_row("GPU, segment numbers from the host (10 B in)", s16);
+    std::printf("  %-42s %8.3f ns/query  (1 thread, AVX2)\n", "  + scores to segment numbers on the CPU", ns(t_seg));
     std::printf("  %-42s %8.3f ns/query\n", "CPU AVX2 batch, 1 thread", ns(t_cpu1));
     std::printf("  %-42s %8.3f ns/query  (%u threads)\n", "CPU AVX2 batch, all threads", ns(t_cpun), hw);
     std::printf("  %-42s %8s\n", "GPU answers equal CPU answers", agree ? "yes" : "NO");
